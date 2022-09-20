@@ -159,11 +159,63 @@ namespace Sockets
 
         private static byte[] ProcessRequest(Request request)
         {
-            // TODO
-            var head = new StringBuilder("OK");
-            var body = new byte[0];
+            var head = new StringBuilder();
+            var body = Array.Empty<byte>(); 
+            var requestUri = request.RequestUri;
+            var (path, queryString) = (requestUri, "");
+            if(requestUri.Contains('?'))
+            {
+                (path, queryString) = (requestUri.Split("?")[0], requestUri.Split("?")[1]);
+            }
+            switch (path)
+            {
+                case "/hello.html":
+                case "/":
+                    head.Append("HTTP/1.1 200 OK\r\n");
+                    head.Append("Content-Type: text/html; charset=utf-8\r\n");
+                    body = File.ReadAllBytes("hello.html");
+                    var parameters = HttpUtility.ParseQueryString(queryString);
+                    var name = "World";
+                    if (parameters["name"] is not null)
+                    {
+                        name = parameters["name"];
+                        head.Append($"Set-Cookie: name={name};\r\n");
+                    }
+                    else
+                    {
+                        var cookie = request.Headers.FirstOrDefault(x => x.Name.Contains("Cookie"));
+                        if (cookie != null)
+                            name = cookie.Value.Split().FirstOrDefault(x => x.Contains("name=")).Remove(0, 5);
+                    }
+                    var greeting = parameters["greeting"] ?? "Hello";
+                    var bodyTemplate = Encoding.UTF8.GetString(body);
+                    bodyTemplate = bodyTemplate
+                        .Replace("{{Hello}}", HttpUtility.HtmlEncode(greeting))
+                        .Replace("{{World}}", HttpUtility.HtmlEncode(name));
+                    body = Encoding.UTF8.GetBytes(bodyTemplate);
+
+                    break;
+                case "/groot.gif":
+                    body = File.ReadAllBytes("groot.gif");
+                    head.Append("HTTP/1.1 200 OK\r\n");
+                    head.Append("Content-Type: image/gif; charset=utf-8\r\n");
+                    break;
+                case "/time.html":
+                    var timeTemplate = File.ReadAllText("time.template.html");
+                    body = Encoding.UTF8.GetBytes(
+                        timeTemplate.Replace("{{ServerTime}}", DateTime.Now.ToString())
+                        );
+                    head.Append("HTTP/1.1 200 OK\r\n");
+                    head.Append("Content-Type: text/html; charset=utf-8\r\n");
+                    break;
+                default:
+                    head.Append("HTTP/1.1 404 Not Found\r\n");
+                    break;
+            }
+            head.Append($"Content-Length: {body.Length}\r\n\r\n");
             return CreateResponseBytes(head, body);
         }
+        
 
         // Собирает ответ в виде массива байт из байтов строки head и байтов body.
         private static byte[] CreateResponseBytes(StringBuilder head, byte[] body)
